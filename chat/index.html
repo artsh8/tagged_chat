@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Чат</title>
+    <script src="/static/htmx.min.js"></script>
+</head>
+
+<body>
+    <h1>Основная страница чата</h1>
+    <div class="chat-container">
+        <div id="chat-messages" class="messages"></div>
+        <div class="chat-input">
+            <input type="text" id="message-input" maxlength="1000" placeholder="Введите сообщение">
+            <button id="send-button">Отправить</button>
+        </div>
+    </div>
+    <div class="detail">
+        <div class="tag-container">
+            <ul id="tag-list" hx-get="/tags" hx-trigger="load" hx-target="#tag-list" hx-swap="innerHTML"></ul>
+            <form id="tag-form" hx-post="/add-tag" hx-target="#tag-list" hx-swap="innerHTML"
+                hx-on::after-request="clearInput()" onsubmit="return false;">
+                <input type="text" id="tag-input" name="tagInput" minlength="3" maxlength="50"
+                    placeholder="Название тэга" required onkeypress="restrictInput(event)">
+                <button type="submit">Добавить</button>
+            </form>
+        </div>
+        <div class="search-container">
+            <form id="search-form" hx-get="/search" hx-target="#result-list" hx-swap="innerHTML"
+                onsubmit="return false;">
+                <input type="text" id="search-input" name="q" maxlength="100" placeholder="Искать в сообщениях"
+                    required>
+                <button type="submit">Поиск</button>
+            </form>
+            <div id="result-list" class="messages"></div>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket('ws://localhost:8001/ws');
+
+        ws.onmessage = function (event) {
+            const messageObj = JSON.parse(event.data);
+            const updateDiv = document.getElementById(messageObj.id);
+            if (updateDiv) {
+                if (messageObj.tag.trim() !== '') {
+                    const updateTagDiv = updateDiv.querySelector('.messageTag');
+                    updateTagDiv.innerText = messageObj.tag;
+                }
+            } else {
+                const messagesDiv = document.getElementById('chat-messages');
+                const newMessage = document.createElement('div');
+
+                newMessage.id = messageObj.id;
+                newMessage.className = "message";
+
+                const messageTag = document.createElement('div');
+                messageTag.className = "messageTag";
+                messageTag.innerText = messageObj.tag;
+                newMessage.appendChild(messageTag);
+
+                const messageText = document.createElement('div');
+                messageText.className = "messageText";
+                messageText.innerText = messageObj.content;
+                newMessage.appendChild(messageText);
+
+                messagesDiv.appendChild(newMessage);
+
+                if (messagesDiv.children.length > 10) {
+                    messagesDiv.removeChild(messagesDiv.firstChild);
+                }
+
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        };
+
+        document.getElementById('send-button').onclick = function () {
+            const input = document.getElementById('message-input');
+            if (input.value.trim()) {
+                const message = { content: input.value };
+                const jsonMessage = JSON.stringify(message);
+                ws.send(jsonMessage);
+                input.value = '';
+            }
+        };
+
+        document.getElementById('message-input').addEventListener('keypress', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                document.getElementById('send-button').click();
+            }
+        });
+
+        function clearInput() {
+            document.getElementById('tag-input').value = '';
+        }
+
+        function restrictInput(event) {
+            const char = String.fromCharCode(event.which);
+            if (!/[a-zA-Zа-яА-ЯёЁ\s]/.test(char)) {
+                event.preventDefault();
+            }
+        }
+
+        let lastRequestTime = 0;
+        const throttleDelay = 20000; // 20 секунд
+
+        document.getElementById('tag-list').addEventListener('mouseenter', function () {
+            const currentTime = Date.now();
+            if (currentTime - lastRequestTime >= throttleDelay) {
+                lastRequestTime = currentTime;
+                htmx.ajax('GET', '/tags', { target: '#tag-list', swap: 'innerHTML' });
+            }
+        });
+    </script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+        }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 400px;
+        }
+
+        .messages {
+            flex-grow: 1;
+            max-height: 300px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            margin-bottom: 10px;
+        }
+
+        .message {
+            display: flex;
+            align-items: center;
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .messageTag {
+            background-color: #4CAF50;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+
+        .messageText {
+            font-size: 14px;
+            color: #333333;
+            max-width: calc(100% - 120px);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-grow: 1;
+        }
+
+        .chat-input {
+            display: flex;
+            width: 100%;
+        }
+
+        #search-form {
+            padding-bottom: 10px;
+        }
+
+        form {
+            display: flex;
+            flex-grow: 1;
+        }
+
+        input {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #333;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            border-color: #4CAF50;
+        }
+
+        .btn-del {
+            background-color: #cd1b1b;
+            color: white;
+            margin-left: auto;
+        }
+
+        .btn-del:hover {
+            background-color: #af2a2a;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-left: 10px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .detail {
+            display: flex;
+            max-height: 400px;
+        }
+
+        .search-container {
+            flex: 1;
+            flex-grow: 1;
+        }
+
+        .tag-container {
+            flex: 1;
+            margin-right: 20px;
+        }
+
+        #tag-list {
+            list-style-type: none;
+            max-height: 300px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-left: 10px;
+        }
+
+        #tag-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+        }
+    </style>
+</body>
+
+</html>

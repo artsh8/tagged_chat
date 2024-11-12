@@ -1,0 +1,47 @@
+version: '3'
+
+services:
+  tagged-chat:
+    build:
+      context: .
+      dockerfile: ./chat/Dockerfile
+    image: artsh8/tagged-chat:latest
+    environment:
+      - HOST=https://opensearch:9200
+      - USERNAME=admin
+      - PASSWORD=StrongPass332^
+      - THROTTLE=30
+    ports:
+      - 8001:8001
+    depends_on:
+      - opensearch
+
+  tag-adder:
+    build:
+      context: .
+      dockerfile: ./tags/Dockerfile
+    image: artsh8/tag-adder:latest
+    environment:
+      - HOST=opensearch
+      - PORT=9200
+      - USERNAME=admin
+      - PASSWORD=StrongPass332^
+      - THROTTLE=20
+    depends_on:
+      - tagged-chat
+
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch-node1
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=StrongPass332^
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - 9200:9200
+      - 9600:9600
+
+volumes:
+  opensearch-data:
+    driver: local
